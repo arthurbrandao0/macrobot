@@ -1,9 +1,9 @@
 import os
 import openai
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
-
+print("bot em execução")
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
 
@@ -19,14 +19,17 @@ ADICIONAR_ALIMENTO = range(1)
 
 # Mensagem de ajuda
 mensagem_ajuda = (
-    "Olá! Eu sou seu assistente de contagem de calorias e macronutrientes. 🥗\n"
-    "Envie uma descrição do alimento e quantidade (ex: '2 bananas') ou grave um áudio.\n"
+    "! Eu sou seu assistente de contagem de calorias e macronutrientes. 🥗\n"
+    "Envie uma descrição do alimento e quantidade (ex: *'2 bananas'* ou *'2 pães e um copo de café com leite'*) ou grave um áudio.\n"
     "Para resetar suas informações diárias, digite `/reset`."
 )
 
 # Função para o comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(mensagem_ajuda)
+    user_name = update.message.from_user.first_name
+    print(user_name)
+
+    await update.message.reply_text(f"Olá, *{user_name}* {mensagem_ajuda}", parse_mode='Markdown')
 
 # Função para consultar o ChatGPT sobre macronutrientes de alimentos
 async def consultar_chatgpt_nutrientes(alimento):
