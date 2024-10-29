@@ -163,6 +163,9 @@ async def reset_info_nutricional(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.message.from_user.id
     info_nutricional_usuarios[user_id] = {"calorias": 0, "proteinas": 0, "carboidratos": 0, "gorduras": 0}
     await update.message.reply_text("🔄 Suas informações nutricionais foram resetadas para zero. Comece novamente!")
+    
+async def resposta_invalida(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("Por favor, escolha apenas 'Sim' ou 'Não' utilizando os botões.")
 
 def main():
     # Configuração do bot
@@ -171,10 +174,12 @@ def main():
     # Handlers para os comandos e mensagens
     conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, adicionar_info_nutricional),
-                      MessageHandler(filters.VOICE, adicionar_info_nutricional)],
+                    MessageHandler(filters.VOICE, adicionar_info_nutricional)],
         states={
-            # ADICIONAR_ALIMENTO: [MessageHandler(filters.Regex('^(Sim|Não)$'), adicionar_ao_total)],
-            ADICIONAR_ALIMENTO: [CallbackQueryHandler(adicionar_ao_total)]
+            ADICIONAR_ALIMENTO: [
+                CallbackQueryHandler(adicionar_ao_total, pattern='^(sim|nao)$'),
+                MessageHandler(filters.ALL, resposta_invalida)
+            ],
         },
         fallbacks=[CommandHandler("reset", reset_info_nutricional)]
     )
