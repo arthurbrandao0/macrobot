@@ -2,3 +2,4 @@ openai==0.28
 telegram
 python-telegram-bot
 python-dotenv
+python-telegram-bot[job-queue]

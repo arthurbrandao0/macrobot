@@ -3,7 +3,7 @@ import openai
 import sqlite3
 import datetime
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler, JobQueue
 from dotenv import load_dotenv
 
 print("bot em execução")
@@ -151,9 +151,8 @@ async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"✅ '{context.user_data['alimento']}' - Informação Nutricional adicionada ao total diário:\n"
                 f"Proteínas: {proteinas:.2f} g\n"
                 f"Carboidratos: {carboidratos:.2f} g\n"
-                f"Gorduras: {gorduras:.2f} g\n\n"
-                f"Calorias: {calorias:.2f} kcal g\n\n"
-                f"Para ver o total de calorias, proteínas, carboidratos e gorduras consumidos hoje, digite /totais."
+                f"Gorduras: {gorduras:.2f} g\n"
+                f"Calorias: {calorias:.2f} kcal"
             )
         except ValueError:
             await query.edit_message_text("Erro ao interpretar os nutrientes. Por favor, tente novamente.")
@@ -170,29 +169,32 @@ async def reset_info_nutricional(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("🔄 Suas informações nutricionais foram resetadas para zero. Comece novamente!")
 
 # Função para consultar o total diário do usuário
-def consultar_totais_diarios(user_id):
-    # Obter a data atual no formato "YYYY-MM-DD"
-    data_atual = datetime.datetime.now().strftime("%Y-%m-%d")
-    
-    # Consulta SQL para somar os nutrientes consumidos na data atual
+def consultar_totais_diarios(user_id, data_consulta):
+    # Consulta SQL para obter todos os alimentos consumidos na data fornecida
+    cursor.execute('''
+    SELECT alimento, proteinas, carboidratos, gorduras, calorias, data_hora
+    FROM info_nutricional
+    WHERE user_id = ? AND DATE(data_hora) = ?
+    ''', (user_id, data_consulta))
+    alimentos_consumidos = cursor.fetchall()
+
+    # Consulta SQL para somar os nutrientes consumidos na data fornecida
     cursor.execute('''
     SELECT SUM(proteinas), SUM(carboidratos), SUM(gorduras), SUM(calorias)
     FROM info_nutricional
     WHERE user_id = ? AND DATE(data_hora) = ?
-    ''', (user_id, data_atual))
-    
+    ''', (user_id, data_consulta))
     resultado = cursor.fetchone()
     
     # Se houver algum resultado, retorna os valores, caso contrário, retorna 0 para cada nutriente
-    if resultado:
-        return {
-            "proteinas": resultado[0] or 0,
-            "carboidratos": resultado[1] or 0,
-            "gorduras": resultado[2] or 0,
-            "calorias": resultado[3] or 0
-        }
-    else:
-        return {"proteinas": 0, "carboidratos": 0, "gorduras": 0, "calorias": 0}
+    totais = {
+        "proteinas": resultado[0] or 0,
+        "carboidratos": resultado[1] or 0,
+        "gorduras": resultado[2] or 0,
+        "calorias": resultado[3] or 0
+    }
+    
+    return alimentos_consumidos, totais
 
 # Função para salvar informações nutricionais no banco de dados
 def salvar_info_nutricional(user_id, alimento, proteinas, carboidratos, gorduras, calorias):
@@ -206,7 +208,18 @@ def salvar_info_nutricional(user_id, alimento, proteinas, carboidratos, gorduras
 # Função para mostrar totais diários ao usuário
 async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
-    totais = consultar_totais_diarios(user_id)
+    data_atual = datetime.datetime.now().strftime("%Y-%m-%d")
+    alimentos_consumidos, totais = consultar_totais_diarios(user_id, data_atual)
+
+    if alimentos_consumidos:
+        mensagem_alimentos = "🍽️ Alimentos consumidos hoje:\n"
+        for alimento in alimentos_consumidos:
+            mensagem_alimentos += (
+                f"- {alimento[0]}: Proteínas: {alimento[1]:.2f} g, Carboidratos: {alimento[2]:.2f} g, Gorduras: {alimento[3]:.2f} g, Calorias: {alimento[4]:.2f} kcal\n"
+            )
+        await update.message.reply_text(mensagem_alimentos)
+    else:
+        await update.message.reply_text("Você ainda não consumiu nenhum alimento hoje.")
 
     await update.message.reply_text(
         f"🔢 Total consumido hoje:\n"
@@ -216,9 +229,47 @@ async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_T
         f"Calorias: {totais['calorias']:.2f} kcal"
     )
 
+# Função para enviar relatório diário para todos os usuários
+async def enviar_relatorio_diario(context: ContextTypes.DEFAULT_TYPE):
+    print('enviar_relatorio_diario')
+    data_anterior = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    cursor.execute('SELECT DISTINCT user_id FROM info_nutricional')
+    usuarios = cursor.fetchall()
+
+    for usuario in usuarios:
+        user_id = usuario[0]
+        alimentos_consumidos, totais = consultar_totais_diarios(user_id, data_anterior)
+
+        if alimentos_consumidos:
+            mensagem_alimentos = "📊 Relatório do consumo de ontem:\n"
+            for alimento in alimentos_consumidos:
+                mensagem_alimentos += (
+                    f"- {alimento[0]}: Proteínas: {alimento[1]:.2f} g, Carboidratos: {alimento[2]:.2f} g, Gorduras: {alimento[3]:.2f} g, Calorias: {alimento[4]:.2f} kcal\n"
+                )
+            await context.bot.send_message(chat_id=user_id, text=mensagem_alimentos)
+        else:
+            await context.bot.send_message(chat_id=user_id, text="Você não consumiu nenhum alimento ontem.")
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"🔢 Total consumido ontem:\n"
+                f"Proteínas: {totais['proteinas']:.2f} g\n"
+                f"Carboidratos: {totais['carboidratos']:.2f} g\n"
+                f"Gorduras: {totais['gorduras']:.2f} g\n"
+                f"Calorias: {totais['calorias']:.2f} kcal"
+            )
+        )
+
 def main():
     # Configuração do bot
     application = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    # Criação do JobQueue
+    job_queue = application.job_queue
+
+    # Agendar envio de relatório diário para todos os usuários às 8h da manhã
+    job_queue.run_daily(enviar_relatorio_diario, time=datetime.time(hour=19, minute=46, second=0))
 
     # Handlers para os comandos e mensagens
     conv_handler = ConversationHandler(
