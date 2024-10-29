@@ -151,8 +151,9 @@ async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"✅ '{context.user_data['alimento']}' - Informação Nutricional adicionada ao total diário:\n"
                 f"Proteínas: {proteinas:.2f} g\n"
                 f"Carboidratos: {carboidratos:.2f} g\n"
-                f"Gorduras: {gorduras:.2f} g\n"
-                f"Calorias: {calorias:.2f} kcal"
+                f"Gorduras: {gorduras:.2f} g\n\n"
+                f"Calorias: {calorias:.2f} kcal g\n\n"
+                f"Para ver o total de calorias, proteínas, carboidratos e gorduras consumidos hoje, digite /totais."
             )
         except ValueError:
             await query.edit_message_text("Erro ao interpretar os nutrientes. Por favor, tente novamente.")
