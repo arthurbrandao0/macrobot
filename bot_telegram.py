@@ -103,7 +103,7 @@ async def adicionar_info_nutricional(update: Update, context: ContextTypes.DEFAU
         nutrientes_response = await consultar_chatgpt_nutrientes(message)
 
         if mensagem_ajuda in nutrientes_response:
-            await update.message.reply_text(nutrientes_response)
+            await update.message.reply_text("nao entendi nada kkkk, explica melhor")
             return ConversationHandler.END
 
         # await update.message.reply_text(f"{message}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\n\nGostaria de adicionar este alimento ao total diário? (Responda com 'sim' ou 'não')")
