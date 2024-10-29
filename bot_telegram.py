@@ -45,6 +45,45 @@ mensagem_ajuda = (
     "Para resetar suas informações diárias, digite `/reset`."
 )
 
+def consultar_totais_diarios(user_id):
+    # Obter a data atual no formato "YYYY-MM-DD"
+    data_atual = datetime.now().strftime("%Y-%m-%d")
+    
+    # Consulta SQL para somar os nutrientes consumidos na data atual
+    cursor.execute('''
+    SELECT SUM(proteinas), SUM(carboidratos), SUM(gorduras), SUM(calorias)
+    FROM info_nutricional
+    WHERE user_id = ? AND DATE(data_hora) = ?
+    ''', (user_id, data_atual))
+    
+    resultado = cursor.fetchone()
+    
+    # Se houver algum resultado, retorna os valores, caso contrário, retorna 0 para cada nutriente
+    if resultado:
+        return {
+            "proteinas": resultado[0] or 0,
+            "carboidratos": resultado[1] or 0,
+            "gorduras": resultado[2] or 0,
+            "calorias": resultado[3] or 0
+        }
+    else:
+        return {"proteinas": 0, "carboidratos": 0, "gorduras": 0, "calorias": 0}
+    
+async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.message.from_user.id
+    totais = consultar_totais_diarios(user_id)
+    
+    await update.message.reply_text("consultando...")
+    
+    # Responder ao usuário com os totais diários
+    await update.message.reply_text(
+        f"🔢 Total consumido hoje:\n"
+        f"Proteínas: {totais['proteinas']:.2f} g\n"
+        f"Carboidratos: {totais['carboidratos']:.2f} g\n"
+        f"Gorduras: {totais['gorduras']:.2f} g\n"
+        f"Calorias: {totais['calorias']:.2f} kcal"
+    )
+
 def salvar_info_nutricional(user_id, alimento, proteinas, carboidratos, gorduras, calorias):
     data_hora_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cursor.execute('''
@@ -221,7 +260,10 @@ def main():
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("reset", reset_info_nutricional))
+    application.add_handler(CommandHandler("diario", mostrar_totais_diarios))
     application.add_handler(conv_handler)
+
+
 
     # Inicia o bot
     application.run_polling()
