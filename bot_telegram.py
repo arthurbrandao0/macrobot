@@ -2,10 +2,14 @@ import os
 import openai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente do arquivo .env
+load_dotenv()
 
 # Configurações das APIs
-TELEGRAM_TOKEN = '8029564636:AAEA5foTTXpAcjQklAtogpH-p1XLGGQQG-g'
-openai.api_key = os.getenv('OPENAI_API_KEY')  # Obtém a chave da API da OpenAI a partir de uma variável de ambiente
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Armazena o total de informações nutricionais por usuário
 info_nutricional_usuarios = {}
@@ -22,7 +26,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(mensagem_ajuda)
 
 # Função para consultar o ChatGPT sobre macronutrientes de alimentos
-def consultar_chatgpt_nutrientes(alimento):
+async def consultar_chatgpt_nutrientes(alimento):
     try:
         prompt = (
             "Com base na informação enviada (texto, áudio ou imagem), forneça uma contagem precisa ou estimada de "
@@ -33,7 +37,7 @@ def consultar_chatgpt_nutrientes(alimento):
             f"Nutrientes para: {alimento}"
         )
 
-        response = openai.ChatCompletion.create(
+        response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
@@ -44,10 +48,10 @@ def consultar_chatgpt_nutrientes(alimento):
         return mensagem_ajuda
 
 # Função para transcrever áudio com Whisper
-def transcrever_audio(audio_path):
+async def transcrever_audio(audio_path):
     try:
         with open(audio_path, "rb") as audio_file:
-            response = openai.Audio.transcribe("whisper-1", audio_file)
+            response = await openai.Audio.atranscribe("whisper-1", audio_file)
             return response['text']
     except Exception as e:
         print(f"Erro ao transcrever áudio: {e}")
@@ -66,10 +70,10 @@ async def adicionar_info_nutricional(update: Update, context: ContextTypes.DEFAU
             print("Áudio baixado para transcrição")
 
             # Transcreve o áudio para texto
-            alimento = transcrever_audio(audio_path)
+            alimento = await transcrever_audio(audio_path)
             print(f"Áudio transcrito: {alimento}")
 
-            nutrientes_response = consultar_chatgpt_nutrientes(alimento)
+            nutrientes_response = await consultar_chatgpt_nutrientes(alimento)
             await update.message.reply_text(f"{alimento}: {nutrientes_response}")
         except Exception as e:
             print(f"Erro ao processar áudio: {e}")
@@ -78,7 +82,9 @@ async def adicionar_info_nutricional(update: Update, context: ContextTypes.DEFAU
     else:
         # Processa mensagens de texto como antes
         message = update.message.text
-        nutrientes_response = consultar_chatgpt_nutrientes(message)
+
+        print(message)
+        nutrientes_response = await consultar_chatgpt_nutrientes(message)
 
         if mensagem_ajuda in nutrientes_response:
             await update.message.reply_text(nutrientes_response)
