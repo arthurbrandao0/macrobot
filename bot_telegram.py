@@ -231,7 +231,6 @@ async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_T
 
 # Função para enviar relatório diário para todos os usuários
 async def enviar_relatorio_diario(context: ContextTypes.DEFAULT_TYPE):
-    print('enviar_relatorio_diario')
     data_anterior = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     cursor.execute('SELECT DISTINCT user_id FROM info_nutricional')
     usuarios = cursor.fetchall()
@@ -261,15 +260,17 @@ async def enviar_relatorio_diario(context: ContextTypes.DEFAULT_TYPE):
             )
         )
 
+# Função de comando para enviar o relatório manualmente
+async def enviar_relatorio_manual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await enviar_relatorio_diario(context)
+
 def main():
     # Configuração do bot
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Criação do JobQueue
-    job_queue = application.job_queue
-
     # Agendar envio de relatório diário para todos os usuários às 8h da manhã
-    job_queue.run_daily(enviar_relatorio_diario, time=datetime.time(hour=19, minute=46, second=0))
+    job_queue = application.job_queue
+    job_queue.run_daily(enviar_relatorio_diario, time=datetime.time(hour=8, minute=0, second=0))
 
     # Handlers para os comandos e mensagens
     conv_handler = ConversationHandler(
@@ -284,6 +285,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("reset", reset_info_nutricional))
     application.add_handler(CommandHandler("totais", mostrar_totais_diarios))
+    application.add_handler(CommandHandler("enviar_relatorio", enviar_relatorio_manual))
     application.add_handler(conv_handler)
 
     # Inicia o bot
