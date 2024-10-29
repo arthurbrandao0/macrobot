@@ -1,8 +1,28 @@
 import os
+from datetime import datetime
 import openai
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 from dotenv import load_dotenv
+import sqlite3
+
+# Conectar ao banco de dados SQLite
+conn = sqlite3.connect('nutricao.db')
+cursor = conn.cursor()
+
+# Criação da tabela se ela não existir
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS info_nutricional (
+    user_id INTEGER,
+    alimento TEXT,
+    proteinas REAL,
+    carboidratos REAL,
+    gorduras REAL,
+    calorias REAL,
+    data_hora TEXT
+)
+''')
+conn.commit()
 
 print("bot em execução")
 # Carregar variáveis de ambiente do arquivo .env
@@ -25,6 +45,14 @@ mensagem_ajuda = (
     "Para resetar suas informações diárias, digite `/reset`."
 )
 
+def salvar_info_nutricional(user_id, alimento, proteinas, carboidratos, gorduras, calorias):
+    data_hora_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute('''
+    INSERT INTO info_nutricional (user_id, alimento, proteinas, carboidratos, gorduras, calorias, data_hora)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (user_id, alimento, proteinas, carboidratos, gorduras, calorias, data_hora_atual))
+    conn.commit()
+
 # Função para o comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_name = update.message.from_user.first_name
@@ -43,10 +71,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def consultar_chatgpt_nutrientes(alimento):
     try:
         prompt = (
-            "Forneça apenas uma resposta numérica direta contendo os valores de proteínas, carboidratos e gorduras para o alimento informado, separados por espaços, sem qualquer outra explicação. "
-            "Por exemplo: '3.5 12.0 1.2' (proteínas carboidratos gorduras)."
+            "Forneça apenas uma resposta numérica direta contendo os valores de proteínas, carboidratos, gorduras e calorias para o alimento informado, separados por espaços, sem qualquer outra explicação. "
+            "Por exemplo: '3.5 12.0 1.2 150' (proteínas carboidratos gorduras calorias)."
             "Se você não reconhecer o alimento, responda com a seguinte mensagem: "
-            f"'{mensagem_ajuda}' Apenas forneça os valores de proteínas, carboidratos e gorduras para os alimentos conhecidos.\n\n"
+            f"'{mensagem_ajuda}' Apenas forneça os valores de proteínas, carboidratos, gorduras e calorias para os alimentos conhecidos.\n\n"
             f"Nutrientes para: {alimento}"
         )
 
@@ -131,25 +159,17 @@ async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if resposta == 'sim':
         try:
             nutrientes_response = context.user_data['nutrientes_response']
-            proteinas, carboidratos, gorduras = map(float, nutrientes_response.split())
+            proteinas, carboidratos, gorduras, calorias = map(float, nutrientes_response.split())
 
-            if user_id not in info_nutricional_usuarios:
-                info_nutricional_usuarios[user_id] = {"calorias": 0, "proteinas": 0, "carboidratos": 0, "gorduras": 0}
-
-            # Atualiza as informações nutricionais do usuário
-            info_nutricional_usuarios[user_id]["proteinas"] += proteinas
-            info_nutricional_usuarios[user_id]["carboidratos"] += carboidratos
-            info_nutricional_usuarios[user_id]["gorduras"] += gorduras
+            # Salvar os dados no banco de dados com as calorias e a data/hora
+            salvar_info_nutricional(user_id, context.user_data['alimento'], proteinas, carboidratos, gorduras, calorias)
 
             await query.edit_message_text(
                 f"✅ '{context.user_data['alimento']}' - Informação Nutricional adicionada ao total diário:\n"
                 f"Proteínas: {proteinas:.2f} g\n"
                 f"Carboidratos: {carboidratos:.2f} g\n"
-                f"Gorduras: {gorduras:.2f} g\n\n"
-                f"🔢 Total consumido hoje:\n"
-                f"Proteínas: {info_nutricional_usuarios[user_id]['proteinas']:.2f} g\n"
-                f"Carboidratos: {info_nutricional_usuarios[user_id]['carboidratos']:.2f} g\n"
-                f"Gorduras: {info_nutricional_usuarios[user_id]['gorduras']:.2f} g"
+                f"Gorduras: {gorduras:.2f} g\n"
+                f"Calorias: {calorias:.2f} kcal"
             )
         except ValueError:
             await query.edit_message_text("Erro ao interpretar os nutrientes. Por favor, tente novamente.")
@@ -158,7 +178,6 @@ async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     return ConversationHandler.END
 
-# Função para resetar informações nutricionais
 async def reset_info_nutricional(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
     info_nutricional_usuarios[user_id] = {"calorias": 0, "proteinas": 0, "carboidratos": 0, "gorduras": 0}
@@ -166,6 +185,22 @@ async def reset_info_nutricional(update: Update, context: ContextTypes.DEFAULT_T
     
 async def resposta_invalida(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Por favor, escolha apenas 'Sim' ou 'Não' utilizando os botões.")
+    
+def obter_total_nutricional(user_id):
+    cursor.execute('''
+    SELECT SUM(proteinas), SUM(carboidratos), SUM(gorduras)
+    FROM info_nutricional
+    WHERE user_id = ?
+    ''', (user_id,))
+    resultado = cursor.fetchone()
+    if resultado:
+        return {
+            "proteinas": resultado[0] or 0,
+            "carboidratos": resultado[1] or 0,
+            "gorduras": resultado[2] or 0
+        }
+    else:
+        return {"proteinas": 0, "carboidratos": 0, "gorduras": 0}
 
 def main():
     # Configuração do bot
