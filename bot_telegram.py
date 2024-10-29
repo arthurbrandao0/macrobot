@@ -1,10 +1,18 @@
 import os
-from datetime import datetime
 import openai
+import sqlite3
+import datetime
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 from dotenv import load_dotenv
-import sqlite3
+
+print("bot em execução")
+# Carregar variáveis de ambiente do arquivo .env
+load_dotenv()
+
+# Configurações das APIs
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Conectar ao banco de dados SQLite
 conn = sqlite3.connect('nutricao.db')
@@ -24,14 +32,6 @@ CREATE TABLE IF NOT EXISTS info_nutricional (
 ''')
 conn.commit()
 
-print("bot em execução")
-# Carregar variáveis de ambiente do arquivo .env
-load_dotenv()
-
-# Configurações das APIs
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-openai.api_key = os.getenv('OPENAI_API_KEY')
-
 # Armazena o total de informações nutricionais por usuário
 info_nutricional_usuarios = {}
 
@@ -42,67 +42,14 @@ ADICIONAR_ALIMENTO = range(1)
 mensagem_ajuda = (
     "! Eu sou seu assistente de contagem de calorias e macronutrientes. 🥗\n"
     "Envie uma descrição do alimento e quantidade (ex: *'2 bananas'* ou *'2 pães e um copo de café com leite'*) ou grave um áudio.\n"
-    "Para resetar suas informações diárias, digite `/reset`."
+    "Para resetar suas informações diárias, digite `/reset`.\n"
+    "Para ver o total de calorias, proteínas, carboidratos e gorduras consumidos hoje, digite `/totais`."
 )
-
-def consultar_totais_diarios(user_id):
-    # Obter a data atual no formato "YYYY-MM-DD"
-    data_atual = datetime.now().strftime("%Y-%m-%d")
-    
-    # Consulta SQL para somar os nutrientes consumidos na data atual
-    cursor.execute('''
-    SELECT SUM(proteinas), SUM(carboidratos), SUM(gorduras), SUM(calorias)
-    FROM info_nutricional
-    WHERE user_id = ? AND DATE(data_hora) = ?
-    ''', (user_id, data_atual))
-    
-    resultado = cursor.fetchone()
-    
-    # Se houver algum resultado, retorna os valores, caso contrário, retorna 0 para cada nutriente
-    if resultado:
-        return {
-            "proteinas": resultado[0] or 0,
-            "carboidratos": resultado[1] or 0,
-            "gorduras": resultado[2] or 0,
-            "calorias": resultado[3] or 0
-        }
-    else:
-        return {"proteinas": 0, "carboidratos": 0, "gorduras": 0, "calorias": 0}
-    
-async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.message.from_user.id
-    totais = consultar_totais_diarios(user_id)
-    
-    await update.message.reply_text("consultando...")
-    
-    # Responder ao usuário com os totais diários
-    await update.message.reply_text(
-        f"🔢 Total consumido hoje:\n"
-        f"Proteínas: {totais['proteinas']:.2f} g\n"
-        f"Carboidratos: {totais['carboidratos']:.2f} g\n"
-        f"Gorduras: {totais['gorduras']:.2f} g\n"
-        f"Calorias: {totais['calorias']:.2f} kcal"
-    )
-
-def salvar_info_nutricional(user_id, alimento, proteinas, carboidratos, gorduras, calorias):
-    data_hora_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute('''
-    INSERT INTO info_nutricional (user_id, alimento, proteinas, carboidratos, gorduras, calorias, data_hora)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (user_id, alimento, proteinas, carboidratos, gorduras, calorias, data_hora_atual))
-    conn.commit()
 
 # Função para o comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_name = update.message.from_user.first_name
     print(user_name)
-
-    async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        query = update.callback_query
-        await query.answer()
-        resposta = query.data.lower()
-
-    # Continue a lógica existente
 
     await update.message.reply_text(f"Olá, *{user_name}* {mensagem_ajuda}", parse_mode='Markdown')
 
@@ -154,7 +101,8 @@ async def adicionar_info_nutricional(update: Update, context: ContextTypes.DEFAU
             print(f"Áudio transcrito: {alimento}")
 
             nutrientes_response = await consultar_chatgpt_nutrientes(alimento)
-            await update.message.reply_text(f"{alimento}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\n\nGostaria de adicionar este alimento ao total diário? (Gostaria de adicionar este alimento ao total diário?)", reply_markup=reply_markup)
+            reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton('Sim', callback_data='sim'), InlineKeyboardButton('Não', callback_data='nao')]])
+            await update.message.reply_text(f"{alimento}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\nCalorias: {nutrientes_response.split()[3]} kcal\n\nGostaria de adicionar este alimento ao total diário?", reply_markup=reply_markup)
             context.user_data['nutrientes_response'] = nutrientes_response
             context.user_data['alimento'] = alimento
             return ADICIONAR_ALIMENTO
@@ -170,20 +118,16 @@ async def adicionar_info_nutricional(update: Update, context: ContextTypes.DEFAU
         nutrientes_response = await consultar_chatgpt_nutrientes(message)
 
         if mensagem_ajuda in nutrientes_response:
-            await update.message.reply_text("nao entendi nada kkkk, explica melhor")
+            await update.message.reply_text("Não entendi nada, pode explicar melhor?")
             return ConversationHandler.END
 
-        # await update.message.reply_text(f"{message}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\n\nGostaria de adicionar este alimento ao total diário? (Responda com 'sim' ou 'não')")
-        # reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton('Sim', callback_data='sim'), InlineKeyboardButton('Não', callback_data='nao')]])
         reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton('Sim', callback_data='sim'), InlineKeyboardButton('Não', callback_data='nao')]])
 
-
         await update.message.reply_text(
-            f"{message}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\n\nGostaria de adicionar este alimento ao total diário?",
+            f"{message}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\nCalorias: {nutrientes_response.split()[3]} kcal\n\nGostaria de adicionar este alimento ao total diário?",
             reply_markup=reply_markup
         )
-                
-        #
+        
         context.user_data['nutrientes_response'] = nutrientes_response
         context.user_data['alimento'] = message
         return ADICIONAR_ALIMENTO
@@ -217,29 +161,59 @@ async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     return ConversationHandler.END
 
+# Função para resetar informações nutricionais
 async def reset_info_nutricional(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
-    info_nutricional_usuarios[user_id] = {"calorias": 0, "proteinas": 0, "carboidratos": 0, "gorduras": 0}
+    cursor.execute('DELETE FROM info_nutricional WHERE user_id = ?', (user_id,))
+    conn.commit()
     await update.message.reply_text("🔄 Suas informações nutricionais foram resetadas para zero. Comece novamente!")
+
+# Função para consultar o total diário do usuário
+def consultar_totais_diarios(user_id):
+    # Obter a data atual no formato "YYYY-MM-DD"
+    data_atual = datetime.datetime.now().strftime("%Y-%m-%d")
     
-async def resposta_invalida(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Por favor, escolha apenas 'Sim' ou 'Não' utilizando os botões.")
-    
-def obter_total_nutricional(user_id):
+    # Consulta SQL para somar os nutrientes consumidos na data atual
     cursor.execute('''
-    SELECT SUM(proteinas), SUM(carboidratos), SUM(gorduras)
+    SELECT SUM(proteinas), SUM(carboidratos), SUM(gorduras), SUM(calorias)
     FROM info_nutricional
-    WHERE user_id = ?
-    ''', (user_id,))
+    WHERE user_id = ? AND DATE(data_hora) = ?
+    ''', (user_id, data_atual))
+    
     resultado = cursor.fetchone()
+    
+    # Se houver algum resultado, retorna os valores, caso contrário, retorna 0 para cada nutriente
     if resultado:
         return {
             "proteinas": resultado[0] or 0,
             "carboidratos": resultado[1] or 0,
-            "gorduras": resultado[2] or 0
+            "gorduras": resultado[2] or 0,
+            "calorias": resultado[3] or 0
         }
     else:
-        return {"proteinas": 0, "carboidratos": 0, "gorduras": 0}
+        return {"proteinas": 0, "carboidratos": 0, "gorduras": 0, "calorias": 0}
+
+# Função para salvar informações nutricionais no banco de dados
+def salvar_info_nutricional(user_id, alimento, proteinas, carboidratos, gorduras, calorias):
+    data_hora_atual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute('''
+    INSERT INTO info_nutricional (user_id, alimento, proteinas, carboidratos, gorduras, calorias, data_hora)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (user_id, alimento, proteinas, carboidratos, gorduras, calorias, data_hora_atual))
+    conn.commit()
+
+# Função para mostrar totais diários ao usuário
+async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.message.from_user.id
+    totais = consultar_totais_diarios(user_id)
+
+    await update.message.reply_text(
+        f"🔢 Total consumido hoje:\n"
+        f"Proteínas: {totais['proteinas']:.2f} g\n"
+        f"Carboidratos: {totais['carboidratos']:.2f} g\n"
+        f"Gorduras: {totais['gorduras']:.2f} g\n"
+        f"Calorias: {totais['calorias']:.2f} kcal"
+    )
 
 def main():
     # Configuração do bot
@@ -248,22 +222,17 @@ def main():
     # Handlers para os comandos e mensagens
     conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, adicionar_info_nutricional),
-                    MessageHandler(filters.VOICE, adicionar_info_nutricional)],
+                      MessageHandler(filters.VOICE, adicionar_info_nutricional)],
         states={
-            ADICIONAR_ALIMENTO: [
-                CallbackQueryHandler(adicionar_ao_total, pattern='^(sim|nao)$'),
-                MessageHandler(filters.ALL, resposta_invalida)
-            ],
+            ADICIONAR_ALIMENTO: [CallbackQueryHandler(adicionar_ao_total)]
         },
         fallbacks=[CommandHandler("reset", reset_info_nutricional)]
     )
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("reset", reset_info_nutricional))
-    application.add_handler(CommandHandler("diario", mostrar_totais_diarios))
+    application.add_handler(CommandHandler("totais", mostrar_totais_diarios))
     application.add_handler(conv_handler)
-
-
 
     # Inicia o bot
     application.run_polling()
