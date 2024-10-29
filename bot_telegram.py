@@ -1,8 +1,9 @@
 import os
 import openai
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 from dotenv import load_dotenv
+
 print("bot em execução")
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -28,6 +29,13 @@ mensagem_ajuda = (
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_name = update.message.from_user.first_name
     print(user_name)
+
+    async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        query = update.callback_query
+        await query.answer()
+        resposta = query.data.lower()
+
+    # Continue a lógica existente
 
     await update.message.reply_text(f"Olá, *{user_name}* {mensagem_ajuda}", parse_mode='Markdown')
 
@@ -79,7 +87,7 @@ async def adicionar_info_nutricional(update: Update, context: ContextTypes.DEFAU
             print(f"Áudio transcrito: {alimento}")
 
             nutrientes_response = await consultar_chatgpt_nutrientes(alimento)
-            await update.message.reply_text(f"{alimento}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\n\nGostaria de adicionar este alimento ao total diário? (Responda com 'sim' ou 'não')")
+            await update.message.reply_text(f"{alimento}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\n\nGostaria de adicionar este alimento ao total diário? (Gostaria de adicionar este alimento ao total diário?)", reply_markup=reply_markup)
             context.user_data['nutrientes_response'] = nutrientes_response
             context.user_data['alimento'] = alimento
             return ADICIONAR_ALIMENTO
@@ -98,15 +106,27 @@ async def adicionar_info_nutricional(update: Update, context: ContextTypes.DEFAU
             await update.message.reply_text(nutrientes_response)
             return ConversationHandler.END
 
-        await update.message.reply_text(f"{message}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\n\nGostaria de adicionar este alimento ao total diário? (Responda com 'sim' ou 'não')")
+        # await update.message.reply_text(f"{message}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\n\nGostaria de adicionar este alimento ao total diário? (Responda com 'sim' ou 'não')")
+        # reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton('Sim', callback_data='sim'), InlineKeyboardButton('Não', callback_data='nao')]])
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton('Sim', callback_data='sim'), InlineKeyboardButton('Não', callback_data='nao')]])
+
+
+        await update.message.reply_text(
+            f"{message}\n\nProteínas: {nutrientes_response.split()[0]} g\nCarboidratos: {nutrientes_response.split()[1]} g\nGorduras: {nutrientes_response.split()[2]} g\n\nGostaria de adicionar este alimento ao total diário?",
+            reply_markup=reply_markup
+        )
+                
+        #
         context.user_data['nutrientes_response'] = nutrientes_response
         context.user_data['alimento'] = message
         return ADICIONAR_ALIMENTO
 
 # Função para processar a resposta do usuário sobre adicionar alimento
 async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user_id = update.message.from_user.id
-    resposta = update.message.text.lower()
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    resposta = query.data.lower()
 
     if resposta == 'sim':
         try:
@@ -121,7 +141,7 @@ async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE)
             info_nutricional_usuarios[user_id]["carboidratos"] += carboidratos
             info_nutricional_usuarios[user_id]["gorduras"] += gorduras
 
-            await update.message.reply_text(
+            await query.edit_message_text(
                 f"✅ '{context.user_data['alimento']}' - Informação Nutricional adicionada ao total diário:\n"
                 f"Proteínas: {proteinas:.2f} g\n"
                 f"Carboidratos: {carboidratos:.2f} g\n"
@@ -132,9 +152,9 @@ async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"Gorduras: {info_nutricional_usuarios[user_id]['gorduras']:.2f} g"
             )
         except ValueError:
-            await update.message.reply_text("Erro ao interpretar os nutrientes. Por favor, tente novamente.")
+            await query.edit_message_text("Erro ao interpretar os nutrientes. Por favor, tente novamente.")
     else:
-        await update.message.reply_text("Ok, o alimento não foi adicionado ao total diário.")
+        await query.edit_message_text("Ok, o alimento não foi adicionado ao total diário.")
 
     return ConversationHandler.END
 
@@ -153,7 +173,8 @@ def main():
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, adicionar_info_nutricional),
                       MessageHandler(filters.VOICE, adicionar_info_nutricional)],
         states={
-            ADICIONAR_ALIMENTO: [MessageHandler(filters.TEXT & ~filters.COMMAND, adicionar_ao_total)],
+            # ADICIONAR_ALIMENTO: [MessageHandler(filters.Regex('^(Sim|Não)$'), adicionar_ao_total)],
+            ADICIONAR_ALIMENTO: [CallbackQueryHandler(adicionar_ao_total)]
         },
         fallbacks=[CommandHandler("reset", reset_info_nutricional)]
     )
