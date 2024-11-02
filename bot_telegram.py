@@ -237,7 +237,7 @@ async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text("Você ainda não consumiu nenhum alimento hoje. Bora focar?")
 
     await update.message.reply_text(
-        f"🔢 Total consumido hoje:\n"
+        f"🔢 Total consumido hoje:\n\n"
         f"*Proteínas*: {totais['proteinas']:.2f} g\n"
         f"*Carboidratos*: {totais['carboidratos']:.2f} g\n"
         f"*Gorduras*: {totais['gorduras']:.2f} g\n\n"
