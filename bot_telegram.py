@@ -226,21 +226,22 @@ async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_T
     alimentos_consumidos, totais = consultar_totais_diarios(user_id, data_atual)
 
     if alimentos_consumidos:
-        mensagem_alimentos = "🍽️ Alimentos consumidos hoje:\n"
+        mensagem_alimentos = "🍽️ Alimentos consumidos hoje:\n\n"
         for alimento in alimentos_consumidos:
             mensagem_alimentos += (
-                f"- {alimento[0]}: Proteínas: {alimento[1]:.2f} g, Carboidratos: {alimento[2]:.2f} g, Gorduras: {alimento[3]:.2f} g, Calorias: {alimento[4]:.2f} kcal\n"
+                f"*- {alimento[0]}*:\n\nProteínas: {alimento[1]:.2f} g,\nCarboidratos: {alimento[2]:.2f} g,\nGorduras: {alimento[3]:.2f} g,\nCalorias: {alimento[4]:.2f} kcal\n"
             )
-        await update.message.reply_text(mensagem_alimentos)
+        await update.message.reply_text(mensagem_alimentos, parse_mode='Markdown')
     else:
         await update.message.reply_text("Você ainda não consumiu nenhum alimento hoje.")
 
     await update.message.reply_text(
         f"🔢 Total consumido hoje:\n"
-        f"Proteínas: {totais['proteinas']:.2f} g\n"
-        f"Carboidratos: {totais['carboidratos']:.2f} g\n"
-        f"Gorduras: {totais['gorduras']:.2f} g\n"
-        f"Calorias: {totais['calorias']:.2f} kcal"
+        f"*Proteínas*: {totais['proteinas']:.2f} g\n"
+        f"*Carboidratos*: {totais['carboidratos']:.2f} g\n"
+        f"*Gorduras*: {totais['gorduras']:.2f} g\n\n"
+        f"*Calorias*: {totais['calorias']:.2f} kcal"
+        , parse_mode='Markdown'
     )
 
 # Função para enviar relatório diário para todos os usuários
