@@ -2,13 +2,27 @@ import os
 import openai
 import sqlite3
 import datetime
+import pytz
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler, JobQueue
 from dotenv import load_dotenv
 
 print("bot em execução")
+
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
+
+# Definir o fuso horário (neste caso, UTC-3, representado por "America/Sao_Paulo")
+timezone_utc_3 = pytz.timezone("America/Sao_Paulo")
+
+# Obter o horário atual em UTC
+utc_now = datetime.datetime.now(pytz.utc)
+
+# Converter o horário atual para o fuso horário desejado (UTC-3)
+local_time = utc_now.astimezone(timezone_utc_3)
+
+# Imprimir a hora no fuso horário específico
+print("Hora atual em UTC-3:", local_time.strftime("%Y-%m-%d %H:%M:%S"))
 
 # Configurações das APIs
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -270,7 +284,7 @@ def main():
 
     # Agendar envio de relatório diário para todos os usuários às 8h da manhã
     job_queue = application.job_queue
-    job_queue.run_daily(enviar_relatorio_diario, time=datetime.time(hour=8, minute=0, second=0))
+    job_queue.run_daily(enviar_relatorio_diario, time=datetime.time(hour=8, minute=0, second=0, tzinfo=timezone_utc_3))
 
     # Handlers para os comandos e mensagens
     conv_handler = ConversationHandler(
