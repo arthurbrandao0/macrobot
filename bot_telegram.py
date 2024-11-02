@@ -132,7 +132,7 @@ async def adicionar_info_nutricional(update: Update, context: ContextTypes.DEFAU
         nutrientes_response = await consultar_chatgpt_nutrientes(message)
 
         if mensagem_ajuda in nutrientes_response:
-            await update.message.reply_text("Não entendi nada, pode explicar melhor?")
+            await update.message.reply_text("Uhm, não entendi, poderia me explicar melhor?")
             return ConversationHandler.END
 
         reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton('Sim', callback_data='sim'), InlineKeyboardButton('Não', callback_data='nao')]])
@@ -162,11 +162,12 @@ async def adicionar_ao_total(update: Update, context: ContextTypes.DEFAULT_TYPE)
             salvar_info_nutricional(user_id, context.user_data['alimento'], proteinas, carboidratos, gorduras, calorias)
 
             await query.edit_message_text(
-                f"✅ '{context.user_data['alimento']}' - Informação Nutricional adicionada ao total diário:\n"
-                f"Proteínas: {proteinas:.2f} g\n"
-                f"Carboidratos: {carboidratos:.2f} g\n"
-                f"Gorduras: {gorduras:.2f} g\n"
-                f"Calorias: {calorias:.2f} kcal"
+                f"✅ *{context.user_data['alimento']}* - Informação Nutricional adicionada ao total diário:\n\n"
+                f"*Proteínas*: {proteinas:.2f} g\n"
+                f"*Carboidratos*: {carboidratos:.2f} g\n"
+                f"*Gorduras*: {gorduras:.2f} g\n\n"
+                f"*Calorias*: {calorias:.2f} kcal"
+                , parse_mode='Markdown'
             )
         except ValueError:
             await query.edit_message_text("Erro ao interpretar os nutrientes. Por favor, tente novamente.")
@@ -226,14 +227,14 @@ async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_T
     alimentos_consumidos, totais = consultar_totais_diarios(user_id, data_atual)
 
     if alimentos_consumidos:
-        mensagem_alimentos = "🍽️ Alimentos consumidos hoje:\n\n"
+        mensagem_alimentos = "🍽️ Alimentos consumidos hoje:\n"
         for alimento in alimentos_consumidos:
             mensagem_alimentos += (
-                f"*- {alimento[0]}*:\n\nProteínas: {alimento[1]:.2f} g,\nCarboidratos: {alimento[2]:.2f} g,\nGorduras: {alimento[3]:.2f} g,\nCalorias: {alimento[4]:.2f} kcal\n"
+                f"\n*- {alimento[0]}*:\n\nProteínas: {alimento[1]:.2f} g,\nCarboidratos: {alimento[2]:.2f} g,\nGorduras: {alimento[3]:.2f} g,\\nnCalorias: {alimento[4]:.2f} kcal\n"
             )
         await update.message.reply_text(mensagem_alimentos, parse_mode='Markdown')
     else:
-        await update.message.reply_text("Você ainda não consumiu nenhum alimento hoje.")
+        await update.message.reply_text("Você ainda não consumiu nenhum alimento hoje. Bora focar?")
 
     await update.message.reply_text(
         f"🔢 Total consumido hoje:\n"
