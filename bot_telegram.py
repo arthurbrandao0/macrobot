@@ -84,42 +84,62 @@ def calcular_media_geral(usuario_id):
     ''', (usuario_id,))
     return cursor.fetchone()
 
-def calcular_media_geral_global():
+def calcular_media_geral(usuario_id):
     cursor.execute('''
     SELECT AVG(proteinas), AVG(carboidratos), AVG(gorduras), AVG(calorias)
     FROM info_nutricional
-    ''')
+    WHERE user_id = ?
+    ''', (usuario_id,))
+    return cursor.fetchone()
+
+def calcular_media_periodo(usuario_id, dias):
+    cursor.execute('''
+    SELECT AVG(proteinas), AVG(carboidratos), AVG(gorduras), AVG(calorias)
+    FROM info_nutricional
+    WHERE user_id = ? AND DATE(data_hora) >= DATE('now', ? || ' days')
+    ''', (usuario_id, -dias))
     return cursor.fetchone()
 
 async def gerar_insights(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Gerando insights...")
+    await update.message.reply_text("Analisando seu histórico...")
     
     user_id = update.message.from_user.id
     media_usuario = calcular_media_geral(user_id)
-    media_global = calcular_media_geral_global()
+    media_ultima_semana = calcular_media_periodo(user_id, 7)
+    media_ultimo_mes = calcular_media_periodo(user_id, 30)
 
-    if media_usuario and media_global:
+    if media_usuario and media_ultima_semana and media_ultimo_mes:
         proteinas_user, carboidratos_user, gorduras_user, calorias_user = media_usuario
-        proteinas_global, carboidratos_global, gorduras_global, calorias_global = media_global
-        
-        try:
+        proteinas_semana, carboidratos_semana, gorduras_semana, calorias_semana = media_ultima_semana
+        proteinas_mes, carboidratos_mes, gorduras_mes, calorias_mes = media_ultimo_mes
 
         # Gerando um insight dinâmico usando a OpenAI API
-            prompt = (
-                f"Você é um assistente de dieta. O usuário consumiu em média: \n"
-                f"- Proteínas: {proteinas_user:.2f}g por dia\n"
-                f"- Carboidratos: {carboidratos_user:.2f}g por dia\n"
-                f"- Gorduras: {gorduras_user:.2f}g por dia\n"
-                f"- Calorias: {calorias_user:.2f} kcal por dia\n\n"
-                f"A média de todos os usuários é: \n"
-                f"- Proteínas: {proteinas_global:.2f}g por dia\n"
-                f"- Carboidratos: {carboidratos_global:.2f}g por dia\n"
-                f"- Gorduras: {gorduras_global:.2f}g por dia\n"
-                f"- Calorias: {calorias_global:.2f} kcal por dia\n\n"
-                f"Com base nesses dados, forneça um insight de até 500 caracteres e 100 palavras, de forma leve porém tecnica e objetiva, sobre o desempenho do usuário na dieta, incluindo sugestões de melhoria e tendências percebidas. Mostrar dados em percentual. Escreva como se estivesse falando diretamente com o usuário e pode usar emojis"
-            )
+        prompt = (
+            f"Você é um assistente de dieta. O usuário consumiu em média: \n"
+            f"- Proteínas: {proteinas_user:.2f}g por dia (geral)\n"
+            f"- Carboidratos: {carboidratos_user:.2f}g por dia (geral)\n"
+            f"- Gorduras: {gorduras_user:.2f}g por dia (geral)\n"
+            f"- Calorias: {calorias_user:.2f} kcal por dia (geral)\n\n"
+            f"Na última semana, o consumo foi: \n"
+            f"- Proteínas: {proteinas_semana:.2f}g por dia\n"
+            f"- Carboidratos: {carboidratos_semana:.2f}g por dia\n"
+            f"- Gorduras: {gorduras_semana:.2f}g por dia\n"
+            f"- Calorias: {calorias_semana:.2f} kcal por dia\n\n"
+            f"No último mês, o consumo foi: \n"
+            f"- Proteínas: {proteinas_mes:.2f}g por dia\n"
+            f"- Carboidratos: {carboidratos_mes:.2f}g por dia\n"
+            f"- Gorduras: {gorduras_mes:.2f}g por dia\n"
+            f"- Calorias: {calorias_mes:.2f} kcal por dia\n\n"
+            f"Com base nesses dados, forneça um insight de até 500 caracteres e 100 palavras, "
+            f"de forma leve porém tecnica e objetiva, sobre o desempenho do usuário na dieta, incluindo sugestões de melhoria e tendências percebidas."
+            # f"Tomando como base"
+            # f"um homem de 125kg, 175cm de altura e 33 anos"
+            # f"com foco em emagrecimento e saúde"
+            f"Mostrar dados em percentual, porém de maneira organizada. Escreva como se estivesse falando diretamente com o usuário e pode usar emojis. É importante frisar que esses dados são só para fim de informação e que nao substituiem o acompanhamento de um profissional."
+            f"Escreva o texto como se fosse uma mensagem para o whatsapp, pulando linhas para ficar mais organizado"
+        )
 
-
+        try:
             response = await openai.ChatCompletion.acreate(
                 model="gpt-4",
                 messages=[{"role": "user", "content": prompt}]
