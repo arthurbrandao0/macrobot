@@ -1,4 +1,3 @@
-from PIL import Image
 import os
 import openai
 import sqlite3
@@ -76,56 +75,7 @@ mensagem_help = (
 )
 
 
-async def reconhecer_alimentos_na_imagem(image_path):
-    try:
-        # Converte a imagem para PNG e garante que ela esteja abaixo de 4 MB
-        with Image.open(image_path) as img:
-            png_image_path = image_path.replace(".jpg", ".png")
-            img.save(png_image_path, "PNG")
 
-        # Verificar o tamanho da imagem
-        if os.path.getsize(png_image_path) >= 4 * 1024 * 1024:
-            return "Erro: A imagem precisa ser menor que 4 MB."
-
-        # Abre a imagem para o reconhecimento
-        with open(png_image_path, "rb") as image_file:
-            response = openai.Image.create_variation(
-                image=image_file,
-                n=1,
-                size="1024x1024"
-            )
-            # Extrai a descrição da resposta
-            description = response['data'][0]['url']
-            return description
-    except Exception as e:
-        print(f"Erro ao reconhecer imagem: {e}")
-        return "Erro ao processar a imagem."
-
-# Função para lidar com a imagem enviada pelo usuário
-async def processar_imagem(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.photo:
-        try:
-            # Baixar a imagem de maior resolução
-            photo_file = await update.message.photo[-1].get_file()
-            image_path = f"{photo_file.file_id}.jpg"
-            await photo_file.download_to_drive(image_path)
-            print("Imagem baixada para reconhecimento")
-
-            # Reconhece os alimentos na imagem usando a API da OpenAI
-            descricao_imagem = await reconhecer_alimentos_na_imagem(image_path)
-
-            if descricao_imagem.startswith("Erro"):
-                await update.message.reply_text(descricao_imagem)
-            else:
-                # Pergunta ao ChatGPT sobre os alimentos descritos
-                nutrientes_response = await consultar_chatgpt_nutrientes(descricao_imagem)
-                await update.message.reply_text(f"Alimentos encontrados: {descricao_imagem}\n\n{nutrientes_response}")
-        except Exception as e:
-            print(f"Erro ao processar imagem: {e}")
-            await update.message.reply_text("Erro ao processar a imagem.")
-    else:
-        await update.message.reply_text("Por favor, envie uma foto para análise.")
-        
 # Função para o comando /help
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(mensagem_help, parse_mode='Markdown')
@@ -366,10 +316,6 @@ async def enviar_relatorio_diario(context: ContextTypes.DEFAULT_TYPE):
                 f"Se desejar parar de receber relatórios diários, use o comando /pararrelatorio."
             )
         )
-        
-
-# Função para reconhecer alimentos em uma imagem usando a OpenAI API
-
 
 # Função de comando para enviar o relatório manualmente
 async def enviar_relatorio_manual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -410,8 +356,7 @@ def main():
     # Handlers para os comandos e mensagens
     conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, adicionar_info_nutricional),
-                      MessageHandler(filters.VOICE, adicionar_info_nutricional),
-                      MessageHandler(filters.PHOTO, processar_imagem)],
+                      MessageHandler(filters.VOICE, adicionar_info_nutricional)],
         states={
             ADICIONAR_ALIMENTO: [CallbackQueryHandler(adicionar_ao_total)]
         },
