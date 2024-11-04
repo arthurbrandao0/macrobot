@@ -32,7 +32,7 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 conn = sqlite3.connect('nutricao.db')
 cursor = conn.cursor()
 
-# Criação da tabela se ela não existir
+# Criação das tabelas se elas não existirem
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS info_nutricional (
     user_id INTEGER,
@@ -44,10 +44,13 @@ CREATE TABLE IF NOT EXISTS info_nutricional (
     data_hora TEXT
 )
 ''')
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id INTEGER PRIMARY KEY,
+    receber_relatorio INTEGER DEFAULT 1
+)
+''')
 conn.commit()
-
-# Armazena o total de informações nutricionais por usuário
-info_nutricional_usuarios = {}
 
 # Estados para a conversa
 ADICIONAR_ALIMENTO = range(1)
@@ -57,13 +60,20 @@ mensagem_ajuda = (
     "! Eu sou seu assistente de contagem de calorias e macronutrientes. 🥗\n"
     "Envie uma descrição do alimento e quantidade (ex: *'2 bananas'* ou *'2 pães e um copo de café com leite'*) ou grave um áudio.\n"
     "Para resetar suas informações diárias, digite `/reset`.\n"
-    "Para ver o total de calorias, proteínas, carboidratos e gorduras consumidos hoje, digite `/totais`."
+    "Para ver o total de calorias, proteínas, carboidratos e gorduras consumidos hoje, digite `/totais`.\n"
+    "Para parar de receber relatórios diários, digite `/parar_relatorio`.\n"
+    "Para voltar a receber relatórios diários, digite `/voltar_relatorio`."
 )
 
 # Função para o comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_name = update.message.from_user.first_name
+    user_id = update.message.from_user.id
     print(user_name)
+
+    # Adicionar usuário na tabela de preferências se ainda não estiver registrado
+    cursor.execute('INSERT OR IGNORE INTO user_preferences (user_id) VALUES (?)', (user_id,))
+    conn.commit()
 
     await update.message.reply_text(f"Olá, *{user_name}* {mensagem_ajuda}", parse_mode='Markdown')
 
@@ -183,6 +193,20 @@ async def reset_info_nutricional(update: Update, context: ContextTypes.DEFAULT_T
     conn.commit()
     await update.message.reply_text("🔄 Suas informações nutricionais foram resetadas para zero. Comece novamente!")
 
+# Função para parar de receber relatórios diários
+async def parar_relatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.message.from_user.id
+    cursor.execute('UPDATE user_preferences SET receber_relatorio = 0 WHERE user_id = ?', (user_id,))
+    conn.commit()
+    await update.message.reply_text("🔕 Você não receberá mais os relatórios diários.")
+
+# Função para voltar a receber relatórios diários
+async def voltar_relatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.message.from_user.id
+    cursor.execute('UPDATE user_preferences SET receber_relatorio = 1 WHERE user_id = ?', (user_id,))
+    conn.commit()
+    await update.message.reply_text("🔔 Você voltará a receber os relatórios diários.")
+
 # Função para consultar o total diário do usuário
 def consultar_totais_diarios(user_id, data_consulta):
     # Consulta SQL para obter todos os alimentos consumidos na data fornecida
@@ -230,7 +254,7 @@ async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_T
         mensagem_alimentos = "🍽️ Alimentos consumidos hoje:\n"
         for alimento in alimentos_consumidos:
             mensagem_alimentos += (
-                f"\n*- {alimento[0]}*:\n\nProteínas: {alimento[1]:.2f} g,\nCarboidratos: {alimento[2]:.2f} g,\nGorduras: {alimento[3]:.2f} g,\\nnCalorias: {alimento[4]:.2f} kcal\n"
+                f"\n*- {alimento[0]}*:\n\nProteínas: {alimento[1]:.2f} g,\nCarboidratos: {alimento[2]:.2f} g,\nGorduras: {alimento[3]:.2f} g,\nCalorias: {alimento[4]:.2f} kcal\n"
             )
         await update.message.reply_text(mensagem_alimentos, parse_mode='Markdown')
     else:
@@ -248,7 +272,7 @@ async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_T
 # Função para enviar relatório diário para todos os usuários
 async def enviar_relatorio_diario(context: ContextTypes.DEFAULT_TYPE):
     data_anterior = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-    cursor.execute('SELECT DISTINCT user_id FROM info_nutricional')
+    cursor.execute('SELECT DISTINCT user_id FROM user_preferences WHERE receber_relatorio = 1')
     usuarios = cursor.fetchall()
 
     for usuario in usuarios:
@@ -301,6 +325,8 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("reset", reset_info_nutricional))
     application.add_handler(CommandHandler("totais", mostrar_totais_diarios))
+    application.add_handler(CommandHandler("parar_relatorio", parar_relatorio))
+    application.add_handler(CommandHandler("voltar_relatorio", voltar_relatorio))
     application.add_handler(CommandHandler("enviar_relatorio", enviar_relatorio_manual))
     application.add_handler(conv_handler)
 
