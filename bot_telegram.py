@@ -71,10 +71,54 @@ mensagem_help = (
     "/pararrelatorio - Pare de receber relatórios diários. Use este comando se não quiser mais receber atualizações automáticas sobre o seu consumo do dia anterior.\n\n"
     "/voltarrelatorio - Volte a receber relatórios diários. Se você parou de receber relatórios diários e quer voltar a recebê-los, use este comando.\n\n"
     "/enviarrelatorio - Solicite manualmente o envio do relatório nutricional. Isso pode ser útil para revisar seu consumo sem esperar pelo horário agendado.\n\n"
+    "/insights - Receba insights sobre seu desempenho na dieta, baseado nos seus dados históricos e na média dos demais usuários.\n\n"
     "/help - Exibe esta mensagem com a lista completa de comandos e descrições detalhadas sobre como usar cada funcionalidade do bot."
 )
 
+async def gerar_insights(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.message.from_user.id
 
+    # Consultar os totais de nutrientes do usuário para os últimos 7 dias
+    cursor.execute('''
+    SELECT SUM(proteinas), SUM(carboidratos), SUM(gorduras), SUM(calorias)
+    FROM info_nutricional
+    WHERE user_id = ? AND DATE(data_hora) >= DATE('now', '-7 days')
+    ''', (user_id,))
+    user_totais = cursor.fetchone()
+
+    # Consultar os totais médios de nutrientes de todos os outros usuários para os últimos 7 dias
+    cursor.execute('''
+    SELECT AVG(proteinas), AVG(carboidratos), AVG(gorduras), AVG(calorias)
+    FROM info_nutricional
+    WHERE user_id != ? AND DATE(data_hora) >= DATE('now', '-7 days')
+    ''', (user_id,))
+    avg_totais_gerais = cursor.fetchone()
+
+    # Se não houver dados suficientes, retornar uma mensagem apropriada
+    if not user_totais or not avg_totais_gerais:
+        await update.message.reply_text("Não há dados suficientes para gerar insights sobre o seu desempenho.")
+        return
+
+    # Extrair valores das consultas
+    user_proteinas, user_carboidratos, user_gorduras, user_calorias = user_totais
+    avg_proteinas, avg_carboidratos, avg_gorduras, avg_calorias = avg_totais_gerais
+
+    # Gerar insights baseados nos dados
+    insights = (
+        f"Aqui estão seus insights de desempenho nos últimos 7 dias:\n\n"
+        f"- *Proteínas*: Você consumiu {user_proteinas:.2f}g de proteínas. A média dos outros usuários foi de {avg_proteinas:.2f}g.\n"
+        f"- *Carboidratos*: Você consumiu {user_carboidratos:.2f}g de carboidratos. A média dos outros usuários foi de {avg_carboidratos:.2f}g.\n"
+        f"- *Gorduras*: Você consumiu {user_gorduras:.2f}g de gorduras. A média dos outros usuários foi de {avg_gorduras:.2f}g.\n"
+        f"- *Calorias*: Você consumiu {user_calorias:.2f} kcal. A média dos outros usuários foi de {avg_calorias:.2f} kcal.\n\n"
+    )
+
+    # Avaliar desempenho
+    if user_calorias < avg_calorias:
+        insights += "Parabéns! Você está consumindo menos calorias do que a média dos outros usuários, o que pode indicar um bom controle da dieta."
+    else:
+        insights += "Atenção! Seu consumo de calorias está acima da média dos outros usuários. Considere ajustar sua dieta para melhorar seus resultados."
+
+    await update.message.reply_text(insights, parse_mode='Markdown')
 
 # Função para o comando /help
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -370,6 +414,7 @@ def main():
     application.add_handler(CommandHandler("voltarrelatorio", voltar_relatorio))
     application.add_handler(CommandHandler("enviarrelatorio", enviar_relatorio_manual))
     application.add_handler(CommandHandler("help", help_command))  # Novo handler para o comando /help
+    application.add_handler(CommandHandler("insights", gerar_insights))
     application.add_handler(conv_handler)
 
     # Inicia o bot
