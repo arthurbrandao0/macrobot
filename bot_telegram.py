@@ -75,50 +75,62 @@ mensagem_help = (
     "/help - Exibe esta mensagem com a lista completa de comandos e descrições detalhadas sobre como usar cada funcionalidade do bot."
 )
 
-async def gerar_insights(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.message.from_user.id
-
-    # Consultar os totais de nutrientes do usuário para os últimos 7 dias
-    cursor.execute('''
-    SELECT SUM(proteinas), SUM(carboidratos), SUM(gorduras), SUM(calorias)
-    FROM info_nutricional
-    WHERE user_id = ? AND DATE(data_hora) >= DATE('now', '-7 days')
-    ''', (user_id,))
-    user_totais = cursor.fetchone()
-
-    # Consultar os totais médios de nutrientes de todos os outros usuários para os últimos 7 dias
+# Função para fornecer insights sobre o desempenho na dieta
+def calcular_media_geral(usuario_id):
     cursor.execute('''
     SELECT AVG(proteinas), AVG(carboidratos), AVG(gorduras), AVG(calorias)
     FROM info_nutricional
-    WHERE user_id != ? AND DATE(data_hora) >= DATE('now', '-7 days')
-    ''', (user_id,))
-    avg_totais_gerais = cursor.fetchone()
+    WHERE user_id = ?
+    ''', (usuario_id,))
+    return cursor.fetchone()
 
-    # Se não houver dados suficientes, retornar uma mensagem apropriada
-    if not user_totais or not avg_totais_gerais:
-        await update.message.reply_text("Não há dados suficientes para gerar insights sobre o seu desempenho.")
-        return
+def calcular_media_geral_global():
+    cursor.execute('''
+    SELECT AVG(proteinas), AVG(carboidratos), AVG(gorduras), AVG(calorias)
+    FROM info_nutricional
+    ''')
+    return cursor.fetchone()
 
-    # Extrair valores das consultas
-    user_proteinas, user_carboidratos, user_gorduras, user_calorias = user_totais
-    avg_proteinas, avg_carboidratos, avg_gorduras, avg_calorias = avg_totais_gerais
+async def gerar_insights(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("Gerando insights...")
+    
+    user_id = update.message.from_user.id
+    media_usuario = calcular_media_geral(user_id)
+    media_global = calcular_media_geral_global()
 
-    # Gerar insights baseados nos dados
-    insights = (
-        f"Aqui estão seus insights de desempenho nos últimos 7 dias:\n\n"
-        f"- *Proteínas*: Você consumiu {user_proteinas:.2f}g de proteínas. A média dos outros usuários foi de {avg_proteinas:.2f}g.\n"
-        f"- *Carboidratos*: Você consumiu {user_carboidratos:.2f}g de carboidratos. A média dos outros usuários foi de {avg_carboidratos:.2f}g.\n"
-        f"- *Gorduras*: Você consumiu {user_gorduras:.2f}g de gorduras. A média dos outros usuários foi de {avg_gorduras:.2f}g.\n"
-        f"- *Calorias*: Você consumiu {user_calorias:.2f} kcal. A média dos outros usuários foi de {avg_calorias:.2f} kcal.\n\n"
-    )
+    if media_usuario and media_global:
+        proteinas_user, carboidratos_user, gorduras_user, calorias_user = media_usuario
+        proteinas_global, carboidratos_global, gorduras_global, calorias_global = media_global
+        
+        try:
 
-    # Avaliar desempenho
-    if user_calorias < avg_calorias:
-        insights += "Parabéns! Você está consumindo menos calorias do que a média dos outros usuários, o que pode indicar um bom controle da dieta."
+        # Gerando um insight dinâmico usando a OpenAI API
+            prompt = (
+                f"Você é um assistente de dieta. O usuário consumiu em média: \n"
+                f"- Proteínas: {proteinas_user:.2f}g por dia\n"
+                f"- Carboidratos: {carboidratos_user:.2f}g por dia\n"
+                f"- Gorduras: {gorduras_user:.2f}g por dia\n"
+                f"- Calorias: {calorias_user:.2f} kcal por dia\n\n"
+                f"A média de todos os usuários é: \n"
+                f"- Proteínas: {proteinas_global:.2f}g por dia\n"
+                f"- Carboidratos: {carboidratos_global:.2f}g por dia\n"
+                f"- Gorduras: {gorduras_global:.2f}g por dia\n"
+                f"- Calorias: {calorias_global:.2f} kcal por dia\n\n"
+                f"Com base nesses dados, forneça um insight de até 500 caracteres e 100 palavras, de forma leve porém tecnica e objetiva, sobre o desempenho do usuário na dieta, incluindo sugestões de melhoria e tendências percebidas. Mostrar dados em percentual. Escreva como se estivesse falando diretamente com o usuário e pode usar emojis"
+            )
+
+
+            response = await openai.ChatCompletion.acreate(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            mensagem_insight = response.choices[0].message['content'].strip()
+        except Exception as e:
+            mensagem_insight = f"Erro ao gerar o insight: {e}"
+
+        await update.message.reply_text(mensagem_insight, parse_mode='Markdown')
     else:
-        insights += "Atenção! Seu consumo de calorias está acima da média dos outros usuários. Considere ajustar sua dieta para melhorar seus resultados."
-
-    await update.message.reply_text(insights, parse_mode='Markdown')
+        await update.message.reply_text("Ainda não há dados suficientes para fornecer um insight sobre sua dieta.")
 
 # Função para o comando /help
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
