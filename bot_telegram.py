@@ -61,9 +61,24 @@ mensagem_ajuda = (
     "Envie uma descrição do alimento e quantidade (ex: *'2 bananas'* ou *'2 pães e um copo de café com leite'*) ou grave um áudio.\n"
     "Para resetar suas informações diárias, digite `/reset`.\n"
     "Para ver o total de calorias, proteínas, carboidratos e gorduras consumidos hoje, digite `/totais`.\n"
-    "Para parar de receber relatórios diários, digite `/parar_relatorio`.\n"
-    "Para voltar a receber relatórios diários, digite `/voltar_relatorio`."
 )
+
+mensagem_help = (
+    "*Lista de Comandos Disponíveis:*\n\n"
+    "/start - Inicie o bot e receba uma mensagem de boas-vindas, com instruções básicas para começar a usar o assistente.\n\n"
+    "/reset - Resete suas informações nutricionais diárias. Use este comando quando quiser começar um novo dia ou apagar seus registros atuais.\n\n"
+    "/totais - Exibe o total de macronutrientes e calorias que você consumiu até o momento do dia atual. Essa informação inclui proteínas, carboidratos, gorduras e calorias.\n\n"
+    "/pararrelatorio - Pare de receber relatórios diários. Use este comando se não quiser mais receber atualizações automáticas sobre o seu consumo do dia anterior.\n\n"
+    "/voltarrelatorio - Volte a receber relatórios diários. Se você parou de receber relatórios diários e quer voltar a recebê-los, use este comando.\n\n"
+    "/enviarrelatorio - Solicite manualmente o envio do relatório nutricional. Isso pode ser útil para revisar seu consumo sem esperar pelo horário agendado.\n\n"
+    "/help - Exibe esta mensagem com a lista completa de comandos e descrições detalhadas sobre como usar cada funcionalidade do bot."
+)
+
+
+
+# Função para o comando /help
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(mensagem_help, parse_mode='Markdown')
 
 # Função para o comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -325,9 +340,10 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("reset", reset_info_nutricional))
     application.add_handler(CommandHandler("totais", mostrar_totais_diarios))
-    application.add_handler(CommandHandler("parar_relatorio", parar_relatorio))
-    application.add_handler(CommandHandler("voltar_relatorio", voltar_relatorio))
-    application.add_handler(CommandHandler("enviar_relatorio", enviar_relatorio_manual))
+    application.add_handler(CommandHandler("pararrelatorio", parar_relatorio))
+    application.add_handler(CommandHandler("voltarrelatorio", voltar_relatorio))
+    application.add_handler(CommandHandler("enviarrelatorio", enviar_relatorio_manual))
+    application.add_handler(CommandHandler("help", help_command))  # Novo handler para o comando /help
     application.add_handler(conv_handler)
 
     # Inicia o bot
