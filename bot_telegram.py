@@ -213,7 +213,8 @@ async def parar_relatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user_id = update.message.from_user.id
     cursor.execute('UPDATE user_preferences SET receber_relatorio = 0 WHERE user_id = ?', (user_id,))
     conn.commit()
-    await update.message.reply_text("🔕 Você não receberá mais os relatórios diários.")
+    await update.message.reply_text("🔕 Você não receberá mais os relatórios diários.\n\n"
+                                    "Caso mude de ideia, use o comando /voltarrelatorio para voltar a receber")
 
 # Função para voltar a receber relatórios diários
 async def voltar_relatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -280,7 +281,7 @@ async def mostrar_totais_diarios(update: Update, context: ContextTypes.DEFAULT_T
         f"*Proteínas*: {totais['proteinas']:.2f} g\n"
         f"*Carboidratos*: {totais['carboidratos']:.2f} g\n"
         f"*Gorduras*: {totais['gorduras']:.2f} g\n\n"
-        f"*Calorias*: {totais['calorias']:.2f} kcal"
+        f"*Calorias*: {totais['calorias']:.2f} kcal\n\n"
         , parse_mode='Markdown'
     )
 
@@ -311,13 +312,38 @@ async def enviar_relatorio_diario(context: ContextTypes.DEFAULT_TYPE):
                 f"Proteínas: {totais['proteinas']:.2f} g\n"
                 f"Carboidratos: {totais['carboidratos']:.2f} g\n"
                 f"Gorduras: {totais['gorduras']:.2f} g\n"
-                f"Calorias: {totais['calorias']:.2f} kcal"
+                f"Calorias: {totais['calorias']:.2f} kcal"  
+                f"Se desejar parar de receber relatórios diários, use o comando /pararrelatorio."
             )
         )
 
 # Função de comando para enviar o relatório manualmente
 async def enviar_relatorio_manual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await enviar_relatorio_diario(context)
+    user_id = update.message.from_user.id
+    data_anterior = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    # Consultar os totais de nutrientes do usuário para o dia anterior
+    alimentos_consumidos, totais = consultar_totais_diarios(user_id, data_anterior)
+
+    if alimentos_consumidos:
+        mensagem_alimentos = "📊 Relatório do consumo de ontem:\n"
+        for alimento in alimentos_consumidos:
+            mensagem_alimentos += (
+                f"- {alimento[0]}: Proteínas: {alimento[1]:.2f} g, Carboidratos: {alimento[2]:.2f} g, Gorduras: {alimento[3]:.2f} g, Calorias: {alimento[4]:.2f} kcal\n"
+            )
+        await update.message.reply_text(mensagem_alimentos)
+    else:
+        await update.message.reply_text("Você não consumiu nenhum alimento ontem.")
+
+    await update.message.reply_text(
+        text=(
+            f"🔢 Total consumido ontem:\n"
+            f"Proteínas: {totais['proteinas']:.2f} g\n"
+            f"Carboidratos: {totais['carboidratos']:.2f} g\n"
+            f"Gorduras: {totais['gorduras']:.2f} g\n"
+            f"Calorias: {totais['calorias']:.2f} kcal"
+        )
+    )
 
 def main():
     # Configuração do bot
